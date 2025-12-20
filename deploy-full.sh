@@ -147,9 +147,14 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     npm install --legacy-peer-deps --include=dev
 
     # FIX ULTIME : Installation explicite du builder Angular si manquant
+    # On force la version 17+ (compatible Angular 17/18) ou on laisse npm gérer via package.json
+    # Si le package.json est correct, npm install devrait suffire.
+    # Si ça échoue encore, on force une version compatible.
+    
     if [ ! -d "node_modules/@angular-devkit/build-angular" ]; then
-        echo "⚠️ Builder Angular manquant. Installation forcée..."
-        npm install --save-dev @angular-devkit/build-angular --legacy-peer-deps
+        echo "⚠️ Builder Angular manquant. Tentative d'installation forcée (Version compatible)..."
+        # On essaie d'abord d'installer la version définie dans package.json
+        npm install --save-dev @angular-devkit/build-angular@latest --legacy-peer-deps
     fi
 
     # 4. Construction (Build)
