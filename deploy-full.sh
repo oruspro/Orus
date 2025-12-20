@@ -137,7 +137,9 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
 
     # 3. Installation Dépendances
     echo "📦 Installation des dépendances..."
-    npm install --legacy-peer-deps
+    # --- FIX CRITIQUE : FORCER L'INSTALLATION DES DEV-DEPENDENCIES ---
+    # On ajoute --production=false pour s'assurer que le builder Angular (@angular-devkit) est installé
+    npm install --legacy-peer-deps --production=false
 
     # 4. Construction (Build)
     echo "🏗️  Construction de l'application (Build)..."
