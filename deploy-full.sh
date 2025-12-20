@@ -140,12 +140,14 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
 
     # 3. Installation Dépendances
     echo "📦 Installation des dépendances..."
-    # FIX: On force l'installation des devDependencies pour avoir le CLI Angular
-    npm install --legacy-peer-deps --production=false
+    # FIX: On installe globalement angular/cli si nécessaire et on force l'installation locale
+    npm install -g @angular/cli
+    npm install --legacy-peer-deps --include=dev
 
     # 4. Construction (Build)
     echo "🏗️  Construction de l'application (Build)..."
-    npm run build -- --configuration production
+    # On utilise npx pour s'assurer d'utiliser la version locale ou téléchargée à la volée
+    npx ng build --configuration production
 
     # 5. Déploiement vers le dossier Web PUBLIC
     echo "🚀 Mise en ligne vers $WEB_ROOT..."
