@@ -116,7 +116,6 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     echo "--- Début de l'exécution sur le VPS ---"
     
     # 1. Préparation du dossier SOURCE (là où on clone et build)
-    # On utilise un dossier dédié 'orus-source' pour ne pas mélanger avec le site en ligne
     mkdir -p $VPS_SOURCE_PATH
     
     # --- FIX CRITIQUE : DUBIOUS OWNERSHIP ---
@@ -127,7 +126,6 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     # 2. Récupération Git (Clone/Pull)
     if [ ! -d ".git" ]; then
         echo "📥 Dossier source vide ou non-Git. Nettoyage et Clonage..."
-        # On nettoie le dossier source s'il contient des résidus
         if [ "\$(ls -A)" ]; then
            rm -rf ./* ./.??* 2>/dev/null || true
         fi
@@ -138,16 +136,26 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
         git reset --hard origin/$BRANCH
     fi
 
-    # 3. Installation Dépendances
-    echo "📦 Installation des dépendances..."
-    # FIX: On installe globalement angular/cli si nécessaire et on force l'installation locale
-    npm install -g @angular/cli
+    # 3. Installation Dépendances (ROBUSTE)
+    echo "📦 Installation des dépendances (Méthode propre)..."
+    
+    # On supprime node_modules pour éviter les conflits
+    rm -rf node_modules package-lock.json
+
+    # Installation propre incluant les devDependencies
+    # --legacy-peer-deps évite les blocages de version
     npm install --legacy-peer-deps --include=dev
+
+    # FIX ULTIME : Installation explicite du builder Angular si manquant
+    if [ ! -d "node_modules/@angular-devkit/build-angular" ]; then
+        echo "⚠️ Builder Angular manquant. Installation forcée..."
+        npm install --save-dev @angular-devkit/build-angular --legacy-peer-deps
+    fi
 
     # 4. Construction (Build)
     echo "🏗️  Construction de l'application (Build)..."
-    # On utilise npx pour s'assurer d'utiliser la version locale ou téléchargée à la volée
-    npx ng build --configuration production
+    # Utilisation explicite du binaire ng local
+    ./node_modules/.bin/ng build --configuration production
 
     # 5. Déploiement vers le dossier Web PUBLIC
     echo "🚀 Mise en ligne vers $WEB_ROOT..."
@@ -167,10 +175,8 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     echo "📂 Source buildée : \$BUILD_PATH"
     
     # Copie des fichiers vers le dossier public Nginx
-    # On s'assure que le dossier de destination existe
     mkdir -p $WEB_ROOT
     
-    # On vide le dossier public (sauf s'il est identique au source, ce qui ne devrait pas arriver ici)
     if [ "$VPS_SOURCE_PATH" != "$WEB_ROOT" ]; then
         rm -rf $WEB_ROOT/*
         cp -r \$BUILD_PATH/* $WEB_ROOT/
