@@ -22,9 +22,6 @@ VPS_PROJECT_PATH="/var/www/orus"
 WEB_ROOT="/var/www/html"
 
 # --- MOT DE PASSE (Optionnel) ---
-# Si vous voulez automatiser le mot de passe, écrivez-le ci-dessous entre les guillemets.
-# NOTE : Cela nécessite l'outil 'sshpass' installé sur votre machine.
-# Si ça ne marche pas, laissez vide et tapez-le quand on vous le demandera.
 VPS_PASSWORD=""
 
 echo "📂 Dossier local : $(pwd)"
@@ -94,16 +91,13 @@ echo "---------------------------------------------------"
 
 # Préparation de la commande SSH
 SSH_CMD="ssh"
-
-# Tentative d'utilisation du mot de passe automatique
 if [ -n "$VPS_PASSWORD" ]; then
     if command -v sshpass &> /dev/null; then
         echo "🔑 Mot de passe configuré : Tentative de connexion automatique..."
         export SSHPASS="$VPS_PASSWORD"
         SSH_CMD="sshpass -e ssh"
     else
-        echo "⚠️  Vous avez mis un mot de passe dans le fichier, mais l'outil 'sshpass' n'est pas installé."
-        echo "👉 Vous devrez taper le mot de passe manuellement ci-dessous."
+        echo "⚠️  'sshpass' non installé. Vous devrez taper le mot de passe."
     fi
 else
     echo "👉 Préparez-vous à taper le mot de passe VPS ci-dessous :"
@@ -119,20 +113,20 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     
     # 1. Préparation dossier projet
     mkdir -p $VPS_PROJECT_PATH
+    
+    # --- FIX CRITIQUE : DUBIOUS OWNERSHIP ---
+    # Autoriser Git à utiliser ce dossier même s'il appartient à un autre user
+    git config --global --add safe.directory $VPS_PROJECT_PATH
+    
     cd $VPS_PROJECT_PATH
 
     # 2. Récupération Git
     if [ ! -d ".git" ]; then
         echo "📥 Dossier non-Git détecté. Préparation au clonage..."
-        
-        # Si le dossier contient des fichiers mais pas de .git, on nettoie pour éviter l'erreur "exists and is not an empty directory"
-        # On utilise find pour éviter les erreurs de globbing si le dossier est vide
         if [ "\$(ls -A)" ]; then
            echo "🧹 Le dossier n'est pas vide et n'est pas un dépôt Git. Nettoyage..."
-           # Suppression de tous les fichiers (cachés ou non)
            rm -rf ./* ./.??* 2>/dev/null || true
         fi
-        
         echo "📥 Clonage du dépôt..."
         git clone $REPO_URL .
     else
@@ -149,10 +143,10 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     echo "🏗️  Construction de l'application (Build)..."
     npm run build -- --configuration production
 
-    # 5. Déploiement vers le dossier Web (Nginx/Apache)
+    # 5. Déploiement vers le dossier Web
     echo "🚀 Mise en ligne..."
     
-    # Détection du dossier de sortie Angular (dist/orus ou dist/orus/browser)
+    # Détection du dossier de sortie
     if [ -d "dist/orus/browser" ]; then
         BUILD_PATH="dist/orus/browser"
     elif [ -d "dist/orus" ]; then
@@ -167,16 +161,15 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     
     # Copie des fichiers
     mkdir -p $WEB_ROOT
-    rm -rf $WEB_ROOT/* # Nettoyage de l'ancienne version
-    cp -r \$BUILD_PATH/* $WEB_ROOT/
+    rm -rf $WEB_ROOT/* cp -r \$BUILD_PATH/* $WEB_ROOT/
     
     # Permissions
     chown -R www-data:www-data $WEB_ROOT
     chmod -R 755 $WEB_ROOT
 
-    # 6. Redémarrage Nginx (optionnel mais recommandé)
+    # 6. Redémarrage Nginx
     echo "🔄 Rechargement Nginx..."
-    systemctl reload nginx || echo "⚠️ Attention : Impossible de recharger Nginx (vérifiez s'il est installé)"
+    systemctl reload nginx || echo "⚠️ Attention : Impossible de recharger Nginx"
 
     echo "✅ Déploiement VPS terminé avec succès !"
     echo "--- Fin de l'exécution sur le VPS ---"
@@ -185,11 +178,10 @@ EOF
 if [ $? -eq 0 ]; then
     echo ""
     echo "🎉 DÉPLOIEMENT COMPLET RÉUSSI !"
-    echo "Votre site devrait être à jour."
 else
     echo ""
     echo "❌ ERREUR LORS DU DÉPLOIEMENT VPS."
-    echo "Vérifiez les logs ci-dessus pour identifier le problème."
+    echo "Vérifiez les logs ci-dessus."
 fi
 
 echo ""
