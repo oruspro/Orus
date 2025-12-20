@@ -139,22 +139,30 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     # 3. Installation Dépendances (ROBUSTE)
     echo "📦 Installation des dépendances (Méthode propre)..."
     
-    # On force l'installation de TOUT (y compris devDependencies)
-    # On désactive le mode production s'il est activé par défaut
+    # Force Node environment to development to ensure devDeps are installed
     export NODE_ENV=development
     
-    # On supprime node_modules pour éviter les conflits
-    # rm -rf node_modules package-lock.json # Commenté pour gagner du temps si déjà fait, décommentez si besoin
+    # Clean install
+    rm -rf node_modules package-lock.json
 
-    # Installation propre incluant les devDependencies
-    # --omit=false force l'installation des devDependencies
-    # --legacy-peer-deps évite les blocages de version
-    npm install --legacy-peer-deps --omit=false
+    # Install dependencies including devDependencies correctly
+    npm install --legacy-peer-deps --include=dev
 
-    # FIX ULTIME : Vérification et installation forcée du builder si toujours manquant
-    if [ ! -d "node_modules/@angular-devkit/build-angular" ]; then
-        echo "⚠️ Builder Angular manquant malgré l'install. Installation forcée..."
-        npm install --save-dev @angular-devkit/build-angular --legacy-peer-deps
+    # FIX ULTIME : Alignement de version Angular Builder
+    # On lit la version de @angular/core dans package.json pour installer la version correspondante du builder
+    echo "🔧 Vérification de la compatibilité Angular..."
+    if [ -f "package.json" ]; then
+        # Extraction version core (ex: "17.3.0")
+        CORE_VERSION=\$(grep '"@angular/core":' package.json | cut -d '"' -f 4 | tr -d '^~')
+        echo "ℹ️  Version Angular Core détectée : \$CORE_VERSION"
+        
+        if [ ! -z "\$CORE_VERSION" ]; then
+            echo "🔄 Installation forcee de @angular-devkit/build-angular@\$CORE_VERSION..."
+            npm install --save-dev @angular-devkit/build-angular@\$CORE_VERSION --legacy-peer-deps
+        else
+            echo "⚠️  Impossible de lire la version Angular. Installation fallback..."
+            npm install --save-dev @angular-devkit/build-angular --legacy-peer-deps
+        fi
     fi
 
     # 4. Construction (Build)
