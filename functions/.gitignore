@@ -1,2 +1,8 @@
 node_modules/
 *.local
+--- SECURITY: IGNORING ENVIRONMENT SECRETS ---
+
+Empêche l'envoi des clés API sur GitHub
+
+src/environments/environment.ts
+src/environments/environment.prod.ts

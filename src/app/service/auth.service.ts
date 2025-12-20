@@ -27,18 +27,12 @@ import {
   DocumentData
 } from 'firebase/firestore';
 
-// --- VOTRE CONFIGURATION FIREBASE ---
-const firebaseConfig = {
-  apiKey: "AIzaSyAAPnZ42qmL91ieXFSB5DsRL2b2CIkW6Gs",
-  authDomain: "orus-app-3719e.firebaseapp.com",
-  projectId: "orus-app-3719e",
-  storageBucket: "orus-app-3719e.firebasestorage.app",
-  messagingSenderId: "32776381910",
-  appId: "1:32776381910:web:058c8f487f24e3ecd73077"
-};
+// Import de l'environnement (Standard Angular)
+// Cela permet de changer de config automatiquement entre Dev et Prod
+import { environment } from '.././environments/environment';
 
-// Initialisation de l'app Firebase
-const app = initializeApp(firebaseConfig);
+// Initialisation de l'app Firebase avec la config de l'environnement
+const app = initializeApp(environment.firebase);
 
 export interface Elos {
   chiffres: number;
@@ -69,7 +63,7 @@ export class AuthService {
   // ID de l'application pour structurer la base de données
   private appId = 'orus-prod';
 
-  // Codes secrets pour tes amis (Tu pourras en ajouter d'autres ici)
+  // Codes secrets pour tes amis
   private readonly PROMO_CODES = ['ORUS-FRIEND', 'BETA-TESTER', 'ADMIN-KEY-2025'];
 
   constructor(private ngZone: NgZone) {
