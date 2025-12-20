@@ -123,6 +123,16 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
 
     # 2. Récupération Git
     if [ ! -d ".git" ]; then
+        echo "📥 Dossier non-Git détecté. Préparation au clonage..."
+        
+        # Si le dossier contient des fichiers mais pas de .git, on nettoie pour éviter l'erreur "exists and is not an empty directory"
+        # On utilise find pour éviter les erreurs de globbing si le dossier est vide
+        if [ "\$(ls -A)" ]; then
+           echo "🧹 Le dossier n'est pas vide et n'est pas un dépôt Git. Nettoyage..."
+           # Suppression de tous les fichiers (cachés ou non)
+           rm -rf ./* ./.??* 2>/dev/null || true
+        fi
+        
         echo "📥 Clonage du dépôt..."
         git clone $REPO_URL .
     else
