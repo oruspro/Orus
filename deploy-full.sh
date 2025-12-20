@@ -139,18 +139,28 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     # 3. Installation Dépendances (ROBUSTE)
     echo "📦 Installation des dépendances (Méthode propre)..."
     
+    # On force l'installation de TOUT (y compris devDependencies)
+    # On désactive le mode production s'il est activé par défaut
+    export NODE_ENV=development
+    
     # On supprime node_modules pour éviter les conflits
-    rm -rf node_modules package-lock.json
+    # rm -rf node_modules package-lock.json # Commenté pour gagner du temps si déjà fait, décommentez si besoin
 
     # Installation propre incluant les devDependencies
+    # --omit=false force l'installation des devDependencies
     # --legacy-peer-deps évite les blocages de version
-    # --no-audit accélère le processus
-    npm install --legacy-peer-deps --include=dev --no-audit
+    npm install --legacy-peer-deps --omit=false
+
+    # FIX ULTIME : Vérification et installation forcée du builder si toujours manquant
+    if [ ! -d "node_modules/@angular-devkit/build-angular" ]; then
+        echo "⚠️ Builder Angular manquant malgré l'install. Installation forcée..."
+        npm install --save-dev @angular-devkit/build-angular --legacy-peer-deps
+    fi
 
     # 4. Construction (Build)
     echo "🏗️  Construction de l'application (Build)..."
-    # Utilisation explicite du binaire ng local
-    ./node_modules/.bin/ng build --configuration production
+    # Utilisation explicite du binaire ng local via npx
+    npx ng build --configuration production
 
     # 5. Déploiement vers le dossier Web PUBLIC
     echo "🚀 Mise en ligne vers $WEB_ROOT..."
