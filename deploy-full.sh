@@ -14,13 +14,22 @@ echo "==================================================="
 # --- CONFIGURATION ---
 REPO_URL="https://github.com/oruspro/Orus.git"
 BRANCH="main"
-VPS_USER="root" # Remplacez par votre utilisateur VPS si différent (ex: debian, ubuntu)
+
+# Infos VPS
+VPS_USER="root" 
 VPS_IP="82.165.217.66"
-VPS_PROJECT_PATH="/var/www/orus" # Chemin vers le dossier du projet sur le VPS
+VPS_PROJECT_PATH="/var/www/orus" 
+WEB_ROOT="/var/www/html"
+
+# --- MOT DE PASSE (Optionnel) ---
+# Si vous voulez automatiser le mot de passe, écrivez-le ci-dessous entre les guillemets.
+# NOTE : Cela nécessite l'outil 'sshpass' installé sur votre machine.
+# Si ça ne marche pas, laissez vide et tapez-le quand on vous le demandera.
+VPS_PASSWORD=""
 
 echo "📂 Dossier local : $(pwd)"
 echo "🔗 Dépôt distant : $REPO_URL"
-echo "🖥️  Cible VPS : $VPS_USER@$VPS_IP:$VPS_PROJECT_PATH"
+echo "🖥️  Cible VPS : $VPS_USER@$VPS_IP"
 echo ""
 
 # Sécurité : Vérifier qu'on n'est pas dans System32
@@ -41,7 +50,6 @@ echo "---------------------------------------------------"
 
 # Nettoyage préventif
 if [ -d ".git" ]; then
-    # Vérifie si le remote est correct, sinon réinitialise
     CURRENT_REMOTE=$(git remote get-url origin 2>/dev/null)
     if [ "$CURRENT_REMOTE" != "$REPO_URL" ]; then
         echo "🧹 URL distante incorrecte. Réinitialisation git..."
@@ -83,23 +91,37 @@ echo ""
 echo "---------------------------------------------------"
 echo "☁️  ÉTAPE 2 : DÉPLOIEMENT SUR LE VPS ($VPS_IP)"
 echo "---------------------------------------------------"
+
+# Préparation de la commande SSH
+SSH_CMD="ssh"
+
+# Tentative d'utilisation du mot de passe automatique
+if [ -n "$VPS_PASSWORD" ]; then
+    if command -v sshpass &> /dev/null; then
+        echo "🔑 Mot de passe configuré : Tentative de connexion automatique..."
+        export SSHPASS="$VPS_PASSWORD"
+        SSH_CMD="sshpass -e ssh"
+    else
+        echo "⚠️  Vous avez mis un mot de passe dans le fichier, mais l'outil 'sshpass' n'est pas installé."
+        echo "👉 Vous devrez taper le mot de passe manuellement ci-dessous."
+    fi
+else
+    echo "👉 Préparez-vous à taper le mot de passe VPS ci-dessous :"
+fi
+
 echo "Connexion SSH en cours..."
 
 # Commandes à exécuter sur le serveur distant
-# 1. Aller dans le dossier
-# 2. Récupérer le code (git pull ou git clone si vide)
-# 3. Installer les dépendances (npm install)
-# 4. Construire l'app Angular (npm run build)
-# 5. Copier vers le dossier public du serveur web (ex: /var/www/html) - À ADAPTER SELON VOTRE CONFIG NGINX
-
-ssh "$VPS_USER@$VPS_IP" << EOF
+$SSH_CMD "$VPS_USER@$VPS_IP" << EOF
+    set -e # Arrêter le script à la moindre erreur
+    
     echo "--- Début de l'exécution sur le VPS ---"
     
-    # Création du dossier s'il n'existe pas
+    # 1. Préparation dossier projet
     mkdir -p $VPS_PROJECT_PATH
     cd $VPS_PROJECT_PATH
 
-    # Vérification si git est initialisé, sinon clone, sinon pull force
+    # 2. Récupération Git
     if [ ! -d ".git" ]; then
         echo "📥 Clonage du dépôt..."
         git clone $REPO_URL .
@@ -109,33 +131,57 @@ ssh "$VPS_USER@$VPS_IP" << EOF
         git reset --hard origin/$BRANCH
     fi
 
+    # 3. Installation Dépendances
     echo "📦 Installation des dépendances..."
-    # --legacy-peer-deps est souvent utile pour éviter les conflits
     npm install --legacy-peer-deps
 
+    # 4. Construction (Build)
     echo "🏗️  Construction de l'application (Build)..."
-    # Assurez-vous que la commande de build est 'build' dans package.json
     npm run build -- --configuration production
 
-    # Si vous utilisez Nginx par défaut, on copie souvent le build dans /var/www/html
-    # Adaptez ce chemin si votre config Nginx pointe ailleurs
-    # echo "🚀 Mise en ligne..."
-    # cp -r dist/orus/* /var/www/html/ 
-    # ou si Nginx pointe directement sur dist/orus dans le dossier projet, rien à faire de plus.
+    # 5. Déploiement vers le dossier Web (Nginx/Apache)
+    echo "🚀 Mise en ligne..."
+    
+    # Détection du dossier de sortie Angular (dist/orus ou dist/orus/browser)
+    if [ -d "dist/orus/browser" ]; then
+        BUILD_PATH="dist/orus/browser"
+    elif [ -d "dist/orus" ]; then
+        BUILD_PATH="dist/orus"
+    else
+        echo "❌ ERREUR CRITIQUE : Dossier dist introuvable après le build."
+        exit 1
+    fi
+    
+    echo "📂 Source détectée : \$BUILD_PATH"
+    echo "📂 Destination Web : $WEB_ROOT"
+    
+    # Copie des fichiers
+    mkdir -p $WEB_ROOT
+    rm -rf $WEB_ROOT/* # Nettoyage de l'ancienne version
+    cp -r \$BUILD_PATH/* $WEB_ROOT/
+    
+    # Permissions
+    chown -R www-data:www-data $WEB_ROOT
+    chmod -R 755 $WEB_ROOT
 
-    echo "✅ Déploiement VPS terminé !"
+    # 6. Redémarrage Nginx (optionnel mais recommandé)
+    echo "🔄 Rechargement Nginx..."
+    systemctl reload nginx || echo "⚠️ Attention : Impossible de recharger Nginx (vérifiez s'il est installé)"
+
+    echo "✅ Déploiement VPS terminé avec succès !"
     echo "--- Fin de l'exécution sur le VPS ---"
 EOF
 
 if [ $? -eq 0 ]; then
     echo ""
     echo "🎉 DÉPLOIEMENT COMPLET RÉUSSI !"
-    echo "Votre application est à jour sur GitHub et sur le VPS."
+    echo "Votre site devrait être à jour."
 else
     echo ""
     echo "❌ ERREUR LORS DU DÉPLOIEMENT VPS."
-    echo "Vérifiez vos accès SSH, clés, ou permissions sur le serveur."
+    echo "Vérifiez les logs ci-dessus pour identifier le problème."
 fi
 
 echo ""
-echo "
+echo "==================================================="
+read -p "Appuyez sur Entrée pour quitter..."
