@@ -18,8 +18,12 @@ BRANCH="main"
 # Infos VPS
 VPS_USER="root" 
 VPS_IP="82.165.217.66"
-VPS_PROJECT_PATH="/var/www/orus" 
-WEB_ROOT="/var/www/html"
+
+# CHEMINS VPS ADAPTÉS À VOTRE CONFIGURATION
+# 1. Dossier où on stocke le CODE SOURCE pour le build (séparé du site public)
+VPS_SOURCE_PATH="/var/www/orus-source" 
+# 2. Dossier PUBLIC servi par Nginx (selon votre grep: root /var/www/orus)
+WEB_ROOT="/var/www/orus"
 
 # --- MOT DE PASSE (Optionnel) ---
 VPS_PASSWORD=""
@@ -111,23 +115,22 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
     
     echo "--- Début de l'exécution sur le VPS ---"
     
-    # 1. Préparation dossier projet
-    mkdir -p $VPS_PROJECT_PATH
+    # 1. Préparation du dossier SOURCE (là où on clone et build)
+    # On utilise un dossier dédié 'orus-source' pour ne pas mélanger avec le site en ligne
+    mkdir -p $VPS_SOURCE_PATH
     
     # --- FIX CRITIQUE : DUBIOUS OWNERSHIP ---
-    # Autoriser Git à utiliser ce dossier même s'il appartient à un autre user
-    git config --global --add safe.directory $VPS_PROJECT_PATH
+    git config --global --add safe.directory $VPS_SOURCE_PATH
     
-    cd $VPS_PROJECT_PATH
+    cd $VPS_SOURCE_PATH
 
-    # 2. Récupération Git
+    # 2. Récupération Git (Clone/Pull)
     if [ ! -d ".git" ]; then
-        echo "📥 Dossier non-Git détecté. Préparation au clonage..."
+        echo "📥 Dossier source vide ou non-Git. Nettoyage et Clonage..."
+        # On nettoie le dossier source s'il contient des résidus
         if [ "\$(ls -A)" ]; then
-           echo "🧹 Le dossier n'est pas vide et n'est pas un dépôt Git. Nettoyage..."
            rm -rf ./* ./.??* 2>/dev/null || true
         fi
-        echo "📥 Clonage du dépôt..."
         git clone $REPO_URL .
     else
         echo "🔄 Récupération de la mise à jour..."
@@ -137,16 +140,15 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
 
     # 3. Installation Dépendances
     echo "📦 Installation des dépendances..."
-    # --- FIX CRITIQUE : FORCER L'INSTALLATION DES DEV-DEPENDENCIES ---
-    # On ajoute --production=false pour s'assurer que le builder Angular (@angular-devkit) est installé
+    # FIX: On force l'installation des devDependencies pour avoir le CLI Angular
     npm install --legacy-peer-deps --production=false
 
     # 4. Construction (Build)
     echo "🏗️  Construction de l'application (Build)..."
     npm run build -- --configuration production
 
-    # 5. Déploiement vers le dossier Web
-    echo "🚀 Mise en ligne..."
+    # 5. Déploiement vers le dossier Web PUBLIC
+    echo "🚀 Mise en ligne vers $WEB_ROOT..."
     
     # Détection du dossier de sortie
     if [ -d "dist/orus/browser" ]; then
@@ -155,15 +157,24 @@ $SSH_CMD "$VPS_USER@$VPS_IP" << EOF
         BUILD_PATH="dist/orus"
     else
         echo "❌ ERREUR CRITIQUE : Dossier dist introuvable après le build."
+        echo "Contenu de dist :"
+        ls -R dist/ || echo "Pas de dossier dist"
         exit 1
     fi
     
-    echo "📂 Source détectée : \$BUILD_PATH"
-    echo "📂 Destination Web : $WEB_ROOT"
+    echo "📂 Source buildée : \$BUILD_PATH"
     
-    # Copie des fichiers
+    # Copie des fichiers vers le dossier public Nginx
+    # On s'assure que le dossier de destination existe
     mkdir -p $WEB_ROOT
-    rm -rf $WEB_ROOT/* cp -r \$BUILD_PATH/* $WEB_ROOT/
+    
+    # On vide le dossier public (sauf s'il est identique au source, ce qui ne devrait pas arriver ici)
+    if [ "$VPS_SOURCE_PATH" != "$WEB_ROOT" ]; then
+        rm -rf $WEB_ROOT/*
+        cp -r \$BUILD_PATH/* $WEB_ROOT/
+    else
+        echo "⚠️  Attention : Dossier Source et Web Root sont identiques. Copie annulée pour éviter la boucle."
+    fi
     
     # Permissions
     chown -R www-data:www-data $WEB_ROOT
